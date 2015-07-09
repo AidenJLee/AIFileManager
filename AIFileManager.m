@@ -92,9 +92,14 @@ static AIFileManager *__instance = nil;
         [NSException raise:@"Invalid name" format:@"name is can`t be empty or nil."];
     }
     
-    NSString *strAbsolutePath = [self absolutePath:name];
-    [self createDirectoriesForPath:[strAbsolutePath stringByDeletingLastPathComponent]];
-    return [self writeFileAtPath:strAbsolutePath content:content];
+    NSString *strDestinationPath = [self absolutePath:name];
+    if (![[NSFileManager defaultManager] fileExistsAtPath:strDestinationPath]) {
+        [self createDirectoriesForPath:[strDestinationPath stringByDeletingLastPathComponent]];
+    } else {
+        [self removeItemAtPath:strDestinationPath];
+    }
+    
+    return [self writeFileAtPath:strDestinationPath content:content];
     
 }
 
@@ -229,10 +234,22 @@ static AIFileManager *__instance = nil;
 
 - (BOOL)moveItemAtPath:(NSString *)path toPath:(NSString *)toPath {
     
+    NSString *strSourcePath = [self absolutePath:path];
+    NSString *strDestinationPath = [self absolutePath:toPath];
+    
+    if (![[NSFileManager defaultManager] fileExistsAtPath:strDestinationPath]) {
+        [self createDirectoriesForPath:[strDestinationPath stringByDeletingLastPathComponent]];
+    } else {
+        [self removeItemAtPath:strDestinationPath];
+    }
+    
+    BOOL success;
     NSError *error = nil;
-    BOOL success = [[NSFileManager defaultManager] moveItemAtPath:[self absolutePath:path]
-                                                           toPath:[self absolutePath:toPath]
-                                                            error:&error];
+    if([[NSFileManager defaultManager] fileExistsAtPath:strSourcePath]) {
+        success = [[NSFileManager defaultManager] moveItemAtPath:strSourcePath
+                                                          toPath:strDestinationPath
+                                                           error:&error];
+    }
     
     if (error) {
         [self sendErrorWithNotification:@{ @"error": error, @"description": [NSString stringWithFormat:@"%s", __PRETTY_FUNCTION__] }];
@@ -244,10 +261,22 @@ static AIFileManager *__instance = nil;
 
 - (BOOL)copyItemAtPath:(NSString *)path toPath:(NSString *)toPath {
     
+    NSString *strSourcePath = [self absolutePath:path];
+    NSString *strDestinationPath = [self absolutePath:toPath];
+    
+    if (![[NSFileManager defaultManager] fileExistsAtPath:strDestinationPath]) {
+        [self createDirectoriesForPath:[strDestinationPath stringByDeletingLastPathComponent]];
+    } else {
+        [self removeItemAtPath:strDestinationPath];
+    }
+    
+    BOOL success;
     NSError *error = nil;
-    BOOL success = [[NSFileManager defaultManager] copyItemAtPath:[self absolutePath:path]
-                                                           toPath:[self absolutePath:toPath]
-                                                            error:&error];
+    if([[NSFileManager defaultManager] fileExistsAtPath:strSourcePath]) {
+        success = [[NSFileManager defaultManager] copyItemAtPath:strSourcePath
+                                                          toPath:strDestinationPath
+                                                           error:&error];
+    }
     
     if (error) {
         [self sendErrorWithNotification:@{ @"error": error, @"description": [NSString stringWithFormat:@"%s", __PRETTY_FUNCTION__] }];
@@ -274,16 +303,50 @@ static AIFileManager *__instance = nil;
     
 }
 
-- (BOOL)removeItemAtPath:(NSString *)path withExtension:(NSString *)extension {
-    return NO;
-}
-
 - (BOOL)removeItemAtPath:(NSString *)path withPrefix:(NSString *)prefix {
-    return NO;
+    
+    NSString *strFileFolder = path;
+    if ([self isFileAtPath:path]) {
+        strFileFolder = [strFileFolder stringByDeletingLastPathComponent];
+    }
+    
+    NSString *strPredicate = [NSString stringWithFormat:@"SELF BEGINSWITH[ c] '%@'", prefix];
+    NSArray *list = [self contentsAtPath:strFileFolder];
+    [list filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:strPredicate]];
+    
+    BOOL success = false;
+    for (NSString *strPath in list) {
+        success = [self removeItemAtPath:[strFileFolder stringByAppendingPathComponent:strPath]];
+    }
+    
+    return success;
+    
 }
 
 - (BOOL)removeItemAtPath:(NSString *)path withSuffix:(NSString *)suffix {
-    return NO;
+    
+    NSString *strFileFolder = path;
+    if ([self isFileAtPath:path]) {
+        strFileFolder = [strFileFolder stringByDeletingLastPathComponent];
+    }
+    
+    NSString *strPredicate = [NSString stringWithFormat:@"SELF ENDSWITH[ c] '%@'", suffix];
+    NSArray *list = [self contentsAtPath:strFileFolder];
+    [list filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:strPredicate]];
+    
+    BOOL success = false;
+    for (NSString *strPath in list) {
+        success = [self removeItemAtPath:[strFileFolder stringByAppendingPathComponent:strPath]];
+    }
+    
+    return success;
+}
+
+- (BOOL)removeItemAtPath:(NSString *)path withExtension:(NSString *)extension {
+    
+    NSString *strSuffix = [NSString stringWithFormat:@".%@", extension];
+    return [self removeItemAtPath:path withSuffix:strSuffix];
+    
 }
 
 
@@ -311,30 +374,21 @@ static AIFileManager *__instance = nil;
 }
 
 - (NSNumber *)sizeOfItemAtPath:(NSString *)path error:(NSError **)error {
-    return (NSNumber *)[self attributeOfItemAtPath:path forKey:NSFileSize error:error];
+    return (NSNumber *)[self attributeOfItemAtPath:[self absolutePath:path] forKey:NSFileSize error:error];
 }
 
 // 파일이 존재 하는지
 - (BOOL)isFileExistsAtPath:(NSString *)path {
-    
-    BOOL isDir;
-    BOOL exists = [[NSFileManager defaultManager] fileExistsAtPath:[self absolutePath:path] isDirectory:&isDir];
-    
-    // 파일이 존재하지 않으면 폴더 생성... 왜? 파일 없으면 넣을 예정이라.. 내맘임 -_-
-    if (!exists) {
-        [self createDirectoriesForPath:path];
-    }
-    return exists;
-    
+    return [[NSFileManager defaultManager] fileExistsAtPath:[self absolutePath:path]];
 }
 
 // 파일인지 체크
-- (BOOL)isFileItemAtPath:(NSString *)path {
+- (BOOL)isFileAtPath:(NSString *)path {
     return ([self attributeOfItemAtPath:path forKey:NSFileType error:nil] == NSFileTypeRegular);
 }
 
 - (id)attributeOfItemAtPath:(NSString *)path forKey:(NSString *)key error:(NSError **)error {
-    return [[self attributesOfItemAtPath:path] objectForKey:key];
+    return [[self attributesOfItemAtPath:[self absolutePath:path]] objectForKey:key];
 }
 
 - (NSDictionary *)attributesOfItemAtPath:(NSString *)path {
@@ -365,8 +419,10 @@ static AIFileManager *__instance = nil;
     AIDirectoryType type = [self typeCheckAtPath:path];
     if (type == AIDirectoryTypeNone) {
         type = AIDirectoryTypeDocument;
+        return [self createPathForType:type withPathComponent:path];
+    } else {
+        return path;
     }
-    return [self createPathForType:type withPathComponent:path];
     
 }
 

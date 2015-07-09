@@ -63,7 +63,7 @@ extern NSString * const AIErrorHandlerNotification;
 #pragma mark Utility
 - (NSNumber *)sizeOfItemAtPath:(NSString *)path;                                    // 사이즈 체크
 - (BOOL)isFileExistsAtPath:(NSString *)path;                                        // 파일이 존재 하는지
-- (BOOL)isFileItemAtPath:(NSString *)path;                                          // 파일인지 체크
+- (BOOL)isFileAtPath:(NSString *)path;                                              // 파일인지 체크
 - (id)attributeOfItemAtPath:(NSString *)path forKey:(NSString *)key error:(NSError **)error; // 속성
 - (NSDictionary *)attributesOfItemAtPath:(NSString *)path;
 
